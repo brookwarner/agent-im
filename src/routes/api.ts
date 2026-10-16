@@ -15,7 +15,6 @@ import {
 
 // Thread :id param is now a number (or "#N" string) — pass as string to service for parsing
 
-
 const api = new Hono<{ Bindings: Env }>()
 
 // Error handler helper
@@ -23,14 +22,18 @@ function handleError(e: unknown) {
   if (e instanceof ServiceError) {
     return Response.json({ error: e.message }, { status: e.status })
   }
-  const message = e instanceof Error ? e.message : 'Internal server error'
-  return Response.json({ error: message }, { status: 500 })
+  console.error(e instanceof Error ? e.message : 'Internal error')
+  return Response.json({ error: 'Internal server error' }, { status: 500 })
 }
 
 // GET /api/status
 api.get('/status', async (c) => {
   try {
-    const status = await getStatus(c.env.DB)
+    const status = {
+      name: 'Agent-IM',
+      version: '0.4.0',
+      status: c.env.AIM_TOKEN ? 'ok' : 'unconfigured',
+    }
     return c.json(status)
   } catch (e) {
     return handleError(e)

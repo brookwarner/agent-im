@@ -3,3 +3,10 @@ dist/
 .wrangler/
 .dev.vars
 *.log
+
+.vercel/
+.env*
+.secrets.json
+.connection-keys.txt
+.test-build/
+worker-configuration.d.ts

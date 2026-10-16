@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie'
 import type { Env } from '../types.js'
-import { getStatus } from '../services/im.js'
+import { equal } from '../lib/security.js'
 import { generateGuide } from '../lib/guide.js'
 import chatHtml from '../web/chat.html'
 import loginHtml from '../web/login.html'
@@ -13,15 +13,22 @@ const web = new Hono<{ Bindings: Env }>()
 /** Check if the request has a valid session cookie */
 function hasValidSession(c: { req: { raw: Request }; env: Env }): boolean {
   const token = c.env.AIM_TOKEN
-  // No token configured → local dev, always valid
-  if (!token) return true
+  // Missing configuration must never bypass authentication.
+  if (!token) return false
   const cookie = getCookie(c as Parameters<typeof getCookie>[0], COOKIE_NAME)
-  return cookie === token
+  return !!cookie && equal(cookie, token)
 }
 
 // GET / — Agent usage guide (Markdown)
 web.get('/', async (c) => {
-  const stats = await getStatus(c.env.DB)
+  const stats = {
+    name: 'Agent-IM',
+    version: '0.4.0',
+    status: 'ok',
+    profiles_count: 0,
+    threads_count: 0,
+    messages_count: 0,
+  }
   const url = new URL(c.req.url)
   const baseUrl = `${url.protocol}//${url.host}`
   const guide = generateGuide(stats, baseUrl)
@@ -42,20 +49,8 @@ web.post('/chat/auth', async (c) => {
   const submittedToken = (body['token'] as string)?.trim()
   const expectedToken = c.env.AIM_TOKEN
 
-  // Local dev mode — no token required
-  if (!expectedToken || expectedToken === 'your-token-here') {
-    setCookie(c, COOKIE_NAME, 'local', {
-      path: '/',
-      httpOnly: true,
-      sameSite: 'Lax',
-      maxAge: 60 * 60 * 24 * 7, // 7 days
-    })
-    return c.redirect('/chat')
-  }
-
-  if (submittedToken !== expectedToken) {
+  if (!expectedToken || !submittedToken || !equal(submittedToken, expectedToken))
     return c.redirect('/chat?error=1')
-  }
 
   setCookie(c, COOKIE_NAME, expectedToken, {
     path: '/',

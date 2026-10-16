@@ -57,7 +57,7 @@ export async function getStatus(db: D1Database): Promise<StatusResponse> {
 
   return {
     name: 'Agent-IM',
-    version: '0.3.0',
+    version: '0.4.0',
     status: 'ok',
     profiles_count: (profiles.results[0] as { count: number }).count,
     threads_count: (threads.results[0] as { count: number }).count,
@@ -182,7 +182,7 @@ async function ensureProfile(db: D1Database, senderId: string): Promise<void> {
   const existing = await db.prepare('SELECT id FROM profiles WHERE id = ?').bind(senderId).first()
   if (!existing) {
     await db
-      .prepare('INSERT INTO profiles (id, display_name, role) VALUES (?, ?, ?)')
+      .prepare('INSERT OR IGNORE INTO profiles (id, display_name, role) VALUES (?, ?, ?)')
       .bind(senderId, senderId, 'agent')
       .run()
   }
@@ -217,14 +217,34 @@ export async function sendMessage(
   const id = messageId()
   const readBy = JSON.stringify([input.from])
 
-  await db.batch([
+  const writes = [
     db
       .prepare(
         'INSERT INTO messages (id, thread_id, sender, content, reply_to, read_by) VALUES (?, ?, ?, ?, ?, ?)',
       )
       .bind(id, threadId, input.from, input.content, input.reply_to ?? null, readBy),
     db.prepare("UPDATE threads SET updated_at = datetime('now') WHERE id = ?").bind(threadId),
-  ])
+  ]
+  if (input.client_id)
+    writes.push(
+      db
+        .prepare('INSERT INTO message_keys(sender,client_id,message_id) VALUES (?,?,?)')
+        .bind(input.from, input.client_id, id),
+    )
+  try {
+    await db.batch(writes)
+  } catch (error) {
+    if (input.client_id) {
+      const existing = await db
+        .prepare(
+          'SELECT m.* FROM message_keys k JOIN messages m ON m.id=k.message_id WHERE k.sender=? AND k.client_id=?',
+        )
+        .bind(input.from, input.client_id)
+        .first<MessageRow>()
+      if (existing) return existing
+    }
+    throw error
+  }
 
   const message = await db
     .prepare('SELECT * FROM messages WHERE id = ?')
@@ -242,7 +262,7 @@ export async function readMessages(
   const thread = await getThread(db, threadId)
   if (!thread) throw new ServiceError('Thread not found', 404)
 
-  const limit = Math.min(Math.max(query.limit ?? 5, 1), 50)
+  const limit = Math.min(Math.max(Number.isFinite(query.limit) ? query.limit! : 5, 1), 50)
 
   // Build query conditions
   const conditions: string[] = ['thread_id = ?']
@@ -268,7 +288,7 @@ export async function readMessages(
 
   // Fetch messages: DESC to get latest, then reverse for chronological order
   const result = await db
-    .prepare(`SELECT * FROM messages WHERE ${where} ORDER BY created_at DESC LIMIT ?`)
+    .prepare(`SELECT * FROM messages WHERE ${where} ORDER BY created_at DESC, rowid DESC LIMIT ?`)
     .bind(...binds, limit)
     .all<MessageRow>()
 

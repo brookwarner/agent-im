@@ -1,27 +1,34 @@
 {
   "name": "agent-im",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
     "cf:deploy": "wrangler deploy",
-    "db:init": "wrangler d1 execute agent-im-db --local --file=src/db/schema.sql",
-    "db:init:remote": "wrangler d1 execute agent-im-db --remote --file=src/db/schema.sql",
+    "db:init": "wrangler d1 execute agent-im-db --local --file=src/db/schema.sql && wrangler d1 execute agent-im-db --local --file=src/db/events.sql",
+    "db:init:remote": "wrangler d1 execute agent-im-db --remote --file=src/db/schema.sql && wrangler d1 execute agent-im-db --remote --file=src/db/events.sql",
     "typecheck": "tsc --noEmit",
-    "format": "prettier --write \"src/**/*.ts\" \"*.md\""
+    "format": "prettier --write \"src/**/*.ts\" \"*.md\"",
+    "test": "node --import tsx --test --test-reporter=tap tests/*.test.ts",
+    "secrets:setup": "node scripts/setup-secrets.mjs",
+    "check:deploy": "wrangler deploy --dry-run"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.1",
-    "fetch-to-node": "^2.1.0",
-    "hono": "^4.7.10",
+    "hono": "^4.13.13",
     "nanoid": "^5.1.5",
-    "zod": "^3.25.23"
+    "standardwebhooks": "^1.1.1",
+    "zod": "^3.25.76",
+    "zod-to-json-schema": "^3.25.2"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250320.0",
+    "@cloudflare/workers-types": "^5.20261016.1",
+    "@types/node": "^26.6.5",
+    "esbuild": "^0.28.2",
+    "miniflare": "^5.20261012.1-beta",
+    "prettier": "^3.9.10",
+    "tsx": "^4.23.15",
     "typescript": "^5.8.3",
-    "wrangler": "^4.14.1"
-  },
-  "packageManager": "pnpm@10.27.0+sha512.72d699da16b1179c14ba9e64dc71c9a40988cbdc65c264cb0e489db7de917f20dcf4d64d8723625f2969ba52d4b7e2a1170682d9ac2a5dcaeaab732b7e16f04a"
+    "wrangler": "^4.151.1"
+  }
 }

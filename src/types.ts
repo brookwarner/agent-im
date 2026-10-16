@@ -1,8 +1,5 @@
-// Cloudflare Workers environment bindings
-export interface Env {
-  DB: D1Database
-  AIM_TOKEN: string
-}
+// Generated from wrangler.jsonc and the configured secret names.
+export interface Env extends WorkerBindings {}
 
 // Participant types (thread-local roles)
 export interface ParticipantEntry {
@@ -56,6 +53,7 @@ export interface CreateThreadInput {
 }
 
 export interface SendMessageInput {
+  client_id?: string
   from: string
   content: string
   reply_to?: string

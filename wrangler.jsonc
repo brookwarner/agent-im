@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "agent-im",
+  "account_id": "8109ba15ff4d0564368080f6280bb711",
+  "main": "src/index.ts",
+  "workers_dev": true,
+  "preview_urls": false,
+  "compatibility_date": "2026-10-12",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "agent-im-db",
+      "database_id": "e0be7b87-b19d-492f-b4d6-7062cf3c34cb",
+    },
+  ],
+  "rules": [{ "type": "Text", "globs": ["**/*.html"], "fallthrough": false }],
+  "triggers": { "crons": ["* * * * *"] },
+  "observability": { "enabled": true },
+  "vars": {
+    "MCP_CALLBACK_HOSTS": "chatgpt.com,api.openai.com",
+    "PUBLIC_URL": "https://agent-im.brookwarner-tools.workers.dev",
+  },
+}
