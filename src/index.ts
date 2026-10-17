@@ -25,7 +25,9 @@ app.use(
 )
 app.use('*', async (c, next) => {
   c.header('X-Content-Type-Options', 'nosniff')
-  c.header('Referrer-Policy', 'no-referrer')
+  // Keep Origin on same-origin form POSTs; no-referrer makes it null in browsers.
+  // Cross-origin navigations still receive no Referer.
+  c.header('Referrer-Policy', 'same-origin')
   c.header('Cache-Control', 'no-store')
   const origin = c.req.header('Origin')
   // Prevent cross-site cookie-authorised writes, including login CSRF.

@@ -305,7 +305,11 @@ test('household messaging and MCP Events', async (t) => {
       assert.equal(s!.active, 0)
     })
     await t.test('OAuth PKCE connection, token rotation, and revocation', async () => {
-      const request = async (path: string, body: object | URLSearchParams) => {
+      const request = async (
+        path: string,
+        body: object | URLSearchParams,
+        origin = 'https://messenger.example',
+      ) => {
         const form = body instanceof URLSearchParams
         const r = await app.request(
           'https://messenger.example' + path,
@@ -313,6 +317,7 @@ test('household messaging and MCP Events', async (t) => {
             method: 'POST',
             headers: {
               'Content-Type': form ? 'application/x-www-form-urlencoded' : 'application/json',
+              Origin: origin,
             },
             body: form ? body.toString() : JSON.stringify(body),
           },
@@ -338,8 +343,20 @@ test('household messaging and MCP Events', async (t) => {
         scope: 'household',
       })
       const page = await app.request('https://messenger.example/oauth/authorize?' + q, {}, env, ctx)
+      assert.equal(page.headers.get('Referrer-Policy'), 'same-origin')
+      const loginPage = await app.request('https://messenger.example/chat', {}, env, ctx)
+      assert.equal(loginPage.headers.get('Referrer-Policy'), 'same-origin')
       const html = await page.text()
       const id = html.match(/name="request" value="([^"]+)"/)![1]
+      for (const origin of ['https://untrusted.example', 'null']) {
+        const rejected = await request(
+          '/oauth/authorize',
+          new URLSearchParams({ request: id, key: 'brook-test-key' }),
+          origin,
+        )
+        assert.equal(rejected.status, 403)
+        assert.equal((await rejected.json()).error, 'Origin not permitted')
+      }
       const auth = await request(
         '/oauth/authorize',
         new URLSearchParams({ request: id, key: 'brook-test-key' }),
