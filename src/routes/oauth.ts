@@ -79,12 +79,15 @@ oauth.get('/oauth/authorize', async (c) => {
     return c.text('Invalid authorisation request', 400)
   const id = randomUUID()
   await c.env.DB.prepare('INSERT INTO oauth_requests(id,params,expires_at) VALUES (?,?,?)')
-    .bind(id, JSON.stringify(q), Date.now() + 600_000)
+    .bind(id, JSON.stringify(q), Date.now() + 1800_000)
     .run()
   c.header('Cache-Control', 'no-store')
+  // Chromium checks form-action again on redirects after the form POST.
+  // Permit only this registered client's callback origin, in addition to ourselves.
+  const callbackOrigin = new URL(q.redirect_uri).origin
   c.header(
     'Content-Security-Policy',
-    "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'",
+    `default-src 'none'; style-src 'unsafe-inline'; form-action 'self' ${callbackOrigin}; frame-ancestors 'none'`,
   )
   return c.html(
     `<!doctype html><html lang="en"><meta name="viewport" content="width=device-width"><title>Connect Agent-IM</title><body style="font:18px system-ui;max-width:480px;margin:12vh auto;padding:24px"><h1>Connect your Dot</h1><p>Enter your personal Agent-IM connection key. This grants your Dot access to shared household threads under its own identity.</p><form method="post" action="/oauth/authorize"><input type="hidden" name="request" value="${id}"><label>Connection key <input type="password" name="key" required autocomplete="off" style="display:block;width:100%;margin:16px 0;padding:12px;box-sizing:border-box"></label><button style="padding:12px 24px">Connect</button></form></body></html>`,
@@ -100,20 +103,31 @@ oauth.post('/oauth/authorize', async (c) => {
   )
     .bind(String(body.request || ''), Date.now())
     .first<{ params: string }>()
-  if (!request) return c.text('Request expired. Start the connection again.', 400)
+  if (!request)
+    return c.text(
+      'This connection request has expired or was already submitted. Return to ChatGPT and start a new connection; refreshing this page resubmits the old form.',
+      400,
+    )
   const q = JSON.parse(request.params)
   const code = randomUUID() + randomUUID()
   await c.env.DB.prepare(
     'INSERT INTO oauth_codes(code_hash,principal,client_id,redirect_uri,challenge,expires_at) VALUES (?,?,?,?,?,?)',
   )
-    .bind(hash(code), principal, q.client_id, q.redirect_uri, q.code_challenge, Date.now() + 60_000)
+    .bind(
+      hash(code),
+      principal,
+      q.client_id,
+      q.redirect_uri,
+      q.code_challenge,
+      Date.now() + 300_000,
+    )
     .run()
   const url = new URL(q.redirect_uri)
   url.searchParams.set('code', code)
   if (q.state) url.searchParams.set('state', q.state)
   c.header('Cache-Control', 'no-store')
   c.header('Referrer-Policy', 'no-referrer')
-  return c.redirect(url.toString())
+  return c.redirect(url.toString(), 303)
 })
 oauth.post('/oauth/token', async (c) => {
   const b = await c.req.parseBody()

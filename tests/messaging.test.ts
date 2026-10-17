@@ -344,6 +344,15 @@ test('household messaging and MCP Events', async (t) => {
       })
       const page = await app.request('https://messenger.example/oauth/authorize?' + q, {}, env, ctx)
       assert.equal(page.headers.get('Referrer-Policy'), 'same-origin')
+      assert.match(
+        page.headers.get('Content-Security-Policy')!,
+        /form-action 'self' https:\/\/chatgpt\.com;/,
+      )
+      assert.doesNotMatch(page.headers.get('Content-Security-Policy')!, /form-action[^;]*\*/)
+      const savedRequest = await db
+        .prepare('SELECT expires_at FROM oauth_requests ORDER BY expires_at DESC LIMIT 1')
+        .first<{ expires_at: number }>()
+      assert.ok(savedRequest!.expires_at - Date.now() > 29 * 60_000)
       const loginPage = await app.request('https://messenger.example/chat', {}, env, ctx)
       assert.equal(loginPage.headers.get('Referrer-Policy'), 'same-origin')
       const html = await page.text()
@@ -361,7 +370,7 @@ test('household messaging and MCP Events', async (t) => {
         '/oauth/authorize',
         new URLSearchParams({ request: id, key: 'brook-test-key' }),
       )
-      assert.equal(auth.status, 302)
+      assert.equal(auth.status, 303)
       const location = new URL(auth.headers.get('Location')!)
       assert.equal(location.searchParams.get('state'), 'test-state')
       const params = new URLSearchParams({
