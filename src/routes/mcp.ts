@@ -77,6 +77,8 @@ type ContextEnv = { Bindings: Env; Variables: { principal: string } }
 const mcp = new Hono<ContextEnv>()
 mcp.post('/', async (c) => {
   let id: string | number | null = null
+  let eventMethod: string | undefined
+  const traceId = crypto.randomUUID()
   try {
     const request = await c.req.json()
     id = request.id ?? null
@@ -85,6 +87,21 @@ mcp.post('/', async (c) => {
     const principal = c.get('principal'),
       env = c.env,
       p = request.params ?? {}
+    if (
+      ['server/discover', 'events/list', 'events/subscribe', 'events/unsubscribe'].includes(
+        request.method,
+      )
+    ) {
+      eventMethod = request.method
+      console.log(
+        JSON.stringify({
+          event: 'mcp_event_request',
+          trace_id: traceId,
+          method: eventMethod,
+          principal,
+        }),
+      )
+    }
     const result = async () => {
       switch (request.method) {
         case 'server/discover':
@@ -215,6 +232,15 @@ mcp.post('/', async (c) => {
       }
     }
     const value = await result()
+    if (eventMethod)
+      console.log(
+        JSON.stringify({
+          event: 'mcp_event_result',
+          trace_id: traceId,
+          method: eventMethod,
+          outcome: 'success',
+        }),
+      )
     if (request.id === undefined) return c.body(null, 202)
     return c.json({ jsonrpc: '2.0', id, result: value })
   } catch (error) {
@@ -237,6 +263,22 @@ mcp.post('/', async (c) => {
         JSON.stringify({
           event: 'mcp_error',
           message: error instanceof Error ? error.message : 'unknown',
+        }),
+      )
+    if (eventMethod)
+      console.log(
+        JSON.stringify({
+          event: 'mcp_event_result',
+          trace_id: traceId,
+          method: eventMethod,
+          outcome: 'error',
+          code,
+          reason:
+            error instanceof EventError
+              ? error.reason
+              : error instanceof z.ZodError
+                ? 'invalid_parameters'
+                : 'server_error',
         }),
       )
     return c.json({ jsonrpc: '2.0', id, error: { code, message, ...(data ? { data } : {}) } })

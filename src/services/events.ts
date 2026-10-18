@@ -180,6 +180,14 @@ export async function subscribe(
         { type: 'verification', challenge },
         fetcher,
       )
+      console.log(
+        JSON.stringify({
+          event: 'subscription_verification',
+          subscription_id: id,
+          callback_host: new URL(params.delivery.url).hostname,
+          http_status: response.status,
+        }),
+      )
       // Bound response size before parsing it.
       const reader = response.body?.getReader()
       let text = ''
@@ -223,6 +231,14 @@ export async function subscribe(
       needsVerification ? Date.now() : existing!.verified_at,
     )
     .run()
+  console.log(
+    JSON.stringify({
+      event: 'subscription_saved',
+      subscription_id: id,
+      principal,
+      expires_at: expires,
+    }),
+  )
   return { id, refreshBefore: new Date(expires).toISOString(), cursor: null, truncated: false }
 }
 export async function unsubscribe(env: Env, principal: string, input: unknown) {
