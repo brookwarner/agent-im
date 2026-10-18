@@ -145,6 +145,21 @@ test('household messaging and MCP Events', async (t) => {
           'https://user@callback.example/inbound',
         ])
           assert.throws(() => validateCallback(env, url))
+        const productionCallbacks = { ...env, MCP_CALLBACK_HOSTS: undefined }
+        assert.equal(
+          validateCallback(productionCallbacks, 'https://connectors.api.openai.com/inbound')
+            .hostname,
+          'connectors.api.openai.com',
+        )
+        assert.throws(() =>
+          validateCallback(
+            productionCallbacks,
+            'https://connectors.api.openai.com.evil.example/inbound',
+          ),
+        )
+        assert.throws(() =>
+          validateCallback(productionCallbacks, 'http://connectors.api.openai.com/inbound'),
+        )
         const params = {
           name: 'message.created',
           arguments: { thread_id: thread },

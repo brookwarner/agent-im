@@ -18,7 +18,7 @@
   "triggers": { "crons": ["* * * * *"] },
   "observability": { "enabled": true },
   "vars": {
-    "MCP_CALLBACK_HOSTS": "chatgpt.com,api.openai.com",
+    "MCP_CALLBACK_HOSTS": "chatgpt.com,api.openai.com,connectors.api.openai.com",
     "PUBLIC_URL": "https://agent-im.brookwarner-tools.workers.dev",
   },
 }

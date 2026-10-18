@@ -59,7 +59,7 @@ export const eventDefinition = {
 // Arbitrary MCP callback hosts are intentionally unsupported (SSRF boundary).
 export function validateCallback(env: Env, raw: string): URL {
   const url = new URL(raw)
-  const hosts = (env.MCP_CALLBACK_HOSTS || 'chatgpt.com,api.openai.com')
+  const hosts = (env.MCP_CALLBACK_HOSTS || 'chatgpt.com,api.openai.com,connectors.api.openai.com')
     .split(',')
     .map((h) => h.trim())
   if (
