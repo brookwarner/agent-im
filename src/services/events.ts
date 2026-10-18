@@ -70,9 +70,21 @@ export function validateCallback(env: Env, raw: string): URL {
     (url.port && url.port !== '443') ||
     !hosts.includes(url.hostname)
   ) {
+    // Record only the hostname and rejection flags; callback paths can contain tokens.
+    console.log(
+      JSON.stringify({
+        event: 'callback_rejected',
+        callback_host: url.hostname,
+        https: url.protocol === 'https:',
+        has_credentials: Boolean(url.username || url.password),
+        has_fragment: Boolean(url.hash),
+        standard_port: !url.port || url.port === '443',
+        allowed_host: hosts.includes(url.hostname),
+      }),
+    )
     throw new EventError(
       -32015,
-      'Callback host is not permitted. Ask the owner to configure its exact OpenAI hostname.',
+      `Callback URL rejected for hostname ${url.hostname}. Ask the owner to inspect callback_rejected diagnostics.`,
       'invalid_url',
     )
   }
