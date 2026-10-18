@@ -5,7 +5,13 @@ import { randomBytes, createHash } from 'node:crypto'
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare'
 import { build } from 'esbuild'
 import { Webhook } from 'standardwebhooks'
-import { subscribe, unsubscribe, dispatch, validateCallback } from '../src/services/events.js'
+import {
+  subscribe,
+  unsubscribe,
+  dispatch,
+  validateCallback,
+  signedPost,
+} from '../src/services/events.js'
 import { seal, unseal } from '../src/lib/security.js'
 import type { Env } from '../src/types.js'
 
@@ -67,6 +73,7 @@ test('household messaging and MCP Events', async (t) => {
   const received: Record<string, unknown>[] = []
   const fakeFetch: typeof fetch = async (input, init) => {
     assert.equal(String(input), 'https://callback.example/inbound')
+    assert.equal(init?.redirect, 'manual')
     const h = new Headers(init?.headers)
     const payload = new Webhook(secret).verify(String(init?.body), Object.fromEntries(h)) as Record<
       string,
@@ -180,6 +187,35 @@ test('household messaging and MCP Events', async (t) => {
         )
       },
     )
+    await t.test('rejects callback redirects without following them', async () => {
+      let calls = 0
+      const awaitEncrypted = await seal(env, secret)
+      await assert.rejects(
+        () =>
+          signedPost(
+            env,
+            {
+              id: 'sub_redirect_test',
+              callback_url: 'https://callback.example/inbound',
+              secret: awaitEncrypted,
+              previous_secret: null,
+              rotated_at: null,
+            },
+            'evt_redirect_test',
+            { type: 'verification', challenge: 'test' },
+            async (_url, init) => {
+              calls++
+              assert.equal(init?.redirect, 'manual')
+              return new Response('', {
+                status: 302,
+                headers: { Location: 'https://127.0.0.1/private' },
+              })
+            },
+          ),
+        /Callback redirects are not permitted/,
+      )
+      assert.equal(calls, 1)
+    })
     let messageId: string
     await t.test(
       'sends once, queues atomically, and delivers a signed event without polling',

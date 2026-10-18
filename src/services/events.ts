@@ -119,25 +119,53 @@ export async function signedPost(
   const url = validateCallback(env, sub.callback_url)
   const body = JSON.stringify(payload)
   if (Buffer.byteLength(body) > 262144) throw new EventError(-32602, 'Payload too large')
-  const signedAt = new Date()
-  let signature = new Webhook(await unseal(env, sub.secret)).sign(eventId, signedAt, body)
-  if (sub.previous_secret && sub.rotated_at && Date.now() - sub.rotated_at < 300_000) {
-    signature +=
-      ' ' + new Webhook(await unseal(env, sub.previous_secret)).sign(eventId, signedAt, body)
+  let stage = 'decrypt_signing_key'
+  try {
+    const signedAt = new Date()
+    const signingKey = await unseal(env, sub.secret)
+    stage = 'sign_request'
+    let signature = new Webhook(signingKey).sign(eventId, signedAt, body)
+    if (sub.previous_secret && sub.rotated_at && Date.now() - sub.rotated_at < 300_000) {
+      signature +=
+        ' ' + new Webhook(await unseal(env, sub.previous_secret)).sign(eventId, signedAt, body)
+    }
+    stage = 'send_request'
+    const response = await fetcher(url.toString(), {
+      method: 'POST',
+      redirect: 'manual',
+      signal: AbortSignal.timeout(10_000),
+      headers: {
+        'Content-Type': 'application/json',
+        'webhook-id': eventId,
+        'webhook-timestamp': String(Math.floor(signedAt.getTime() / 1000)),
+        'webhook-signature': signature,
+        'X-MCP-Subscription-Id': sub.id,
+      },
+      body,
+    })
+    // Workers supports manual mode; reject redirects without contacting the target.
+    if (response.status >= 300 && response.status < 400) {
+      await response.body?.cancel()
+      throw new EventError(-32015, 'Callback redirects are not permitted', 'redirect_not_allowed')
+    }
+    return response
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : 'Unknown failure'
+    console.error(
+      JSON.stringify({
+        event: 'webhook_request_failed',
+        subscription_id: sub.id,
+        callback_host: url.hostname,
+        stage,
+        error_type: error instanceof Error ? error.name : 'unknown',
+        detail: detail
+          .replace(/https?:\/\/[^\s]+/g, '[url]')
+          .replace(/[A-Za-z0-9+/_=-]{24,}/g, '[redacted]')
+          .slice(0, 200),
+      }),
+    )
+    throw error
   }
-  return fetcher(url.toString(), {
-    method: 'POST',
-    redirect: 'error',
-    signal: AbortSignal.timeout(10_000),
-    headers: {
-      'Content-Type': 'application/json',
-      'webhook-id': eventId,
-      'webhook-timestamp': String(Math.floor(signedAt.getTime() / 1000)),
-      'webhook-signature': signature,
-      'X-MCP-Subscription-Id': sub.id,
-    },
-    body,
-  })
 }
 export async function requireThread(env: Env, principal: string, id: number) {
   const thread = await getThread(env.DB, id)
